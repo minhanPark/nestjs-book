@@ -49,3 +49,71 @@ getHello(): string {
 
 > - 외에 ?, +, () 문자 역시 정규표현식에서의 와일드 카드와 동일하게 동작하는데, 하이픈(-)과 점(.)은 문자열로 취급합니다.  
 >   @Get('he.lo')는 hello로 요청할 수 없습니다.
+
+## 리다이렉션
+
+응답을 특정 URL로 리다이렉션 하려면 @Redirect 데코레이터 또는 라이브버리 특정 응답 객체를 사용하면 됩니다.(res.redirect()를 직접 호출 할 수 있습니다.)
+
+> @Redirect 는 2개의 인수를 받습니다. url, statusCode인데 모두 필수는 아니고, 생략된 경우 statusCode의 기본값은 302(Found) 입니다.
+
+```ts
+@Redirect('http://localhost:3000', 301)
+@Get('/redirect')
+findOne() {
+  return '리다이렉트';
+}
+```
+
+> 요청 처리 결과에 따라 동적으로 리다이렉트 하고자 한다면 응답으로 다음과 같은 객체를 리턴하면 됩니다.
+
+```ts
+{
+  "url": string,
+  "statusCode": number;
+}
+```
+
+## 하위 도메인 라우팅
+
+api.example.com과 example.com이 있다고 가정하자. 또한 하위 도메인에서 처리하지 못한 요청은 원래의 도메인에서 처리되도록 하고 싶다면 어떻게 해야할까?  
+이때 사용하는 것이 하위 도메인 라우팅이다.
+
+우선 ApiController가 먼저 처리되도록 순서를 정한다.
+
+```ts
+// app.module.ts
+
+@Module({
+  imports: [],
+  controllers: [ApiController, AppController, UsersController],
+  providers: [AppService],
+})
+```
+
+> 같은 엔드포인트를 사용할 땐 순서를 통해서 처리하나봄.
+
+@Controller는 ControllerOptions 객체를 인수로 받는데 host 속성에 하위 도메인을 기술하면 된다.
+
+```ts
+@Controller({ host: 'api.localhost' })
+export class ApiController {
+  @Get()
+  getHello(): string {
+    return `Hello API`;
+  }
+}
+```
+
+또한 @HostParam 데코레이터로 서브 도메인을 변수로 받을 수도 있습니다.
+
+```ts
+@Controller({ host: ':apiVersion.api.localhost' })
+export class ApiController {
+  @Get()
+  getHello(@HostParam('apiVersion') version: string): string {
+    return `Hello API ${version}`;
+  }
+}
+```
+
+위와 같이 해서 버전별로 분리도 가능해진다.
