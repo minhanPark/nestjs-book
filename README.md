@@ -184,3 +184,148 @@ transform: true를 설정해서 class-transformer가 적용되도록 할 수 있
 인가는 유저나 디바이스에게 접근 권한을 부여하거나 거부하는 행위입니다. (인가 - 공연티켓)  
 인증은 인가 의사결정의 한 요소가 될 수 있습니다.(신분증을 보고 공연 티켓을 구매했는지 확인해서 공연에 들어갈 수 있게 해준다)  
 인가 가공물(토큰)로 유저나 디바이스의 신원을 파악하는 방법은 유용하지 않습니다.
+
+## 윈도우, 맥, 리눅스에서 공통으로 환경 변수 설정
+
+```json
+{
+  "scripts": {
+    "start:dev": "NODE_ENV=development nest start --watch"
+  }
+}
+```
+
+맥이나 리눅스 였다면 위에서처럼 환경 변수를 설정할 수 있지만 윈도우에서는 에러가 난다.
+
+```
+'NODE_ENV'은(는) 내부 또는 외부 명령, 실행할 수 있는 프로그램, 또는
+배치 파일이 아닙니다.
+```
+
+공통적으로 사용하려면 어떻게 해야할까?
+
+cross-env라는 모듈을 사용하면 윈도우, 리눅스, 맥에서 공통적으로 사용할 수 있도록 환경변수를 주입할 수 있다.
+
+[cross-env 보러가기](https://www.npmjs.com/package/cross-env)
+
+```
+"start:dev": "cross-env NODE_ENV=development nest start --watch"
+```
+
+환경변수 앞에 cross-env를 붙여주면 된다.
+
+```json
+{
+  "scripts": {
+    "build": "cross-env FIRST_ENV=one SECOND_ENV=two node ./my-program"
+  }
+}
+```
+
+여러개 넣으려면 위와 같다.
+
+## 트랜잭션
+
+> 트랜잭션은 요청을 처리하는 과정에서 데이터베이스에 변경이 일어나는 요청을 독립적으로 분리하고 에러가 발생했을 경우 이전 상태로 되돌리게 하기 위해 데이터베이스에서 제공하는 기능이다.
+
+TypeORM에서 트랜잭션을 사용하는 방법은 2가지가 있다.
+
+1. QueryRunner를 이용해서 단일 DB 커넥션 상태를 생성하고 관리
+2. transaction 함수를 직접 사용하기
+
+```ts
+@Injectable()
+export class UsersService {
+  constructor(private dataSource: DataSource) {}
+  private async saveUser(
+    name: string,
+    email: string,
+    password: string,
+    signupVerifyToken: string,
+  ) {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const user = new UserEntity();
+      user.name = name;
+      user.email = email;
+      user.password = password;
+      user.signupVerifyToken = signupVerifyToken;
+      await queryRunner.manager.save(user);
+      new InternalServerErrorException();
+    } catch (e) {
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release();
+    }
+  }
+}
+```
+
+dataSource를 받아와서 queryRunner를 실행할 수 있다. 나는 서비스들을 건드려서 롤백까지 가능한 줄 알았는데 db에 변경이 일어나는 것이 아니기 때문에 내가 잘못 이해한 것같음.  
+saveUser에 넣어서 만약 에러가 일어나면 유저가 생성되지 않도록 하고 롤백하도록 책에서는 예시를 들었다. 그리고 **에러가 발생해도 메일이 전송되어 버리는데 실제 구현에서는 에러 발생 시 메일 발송이 되지 않도록 처리해보라고 적혀 있었음**  
+이때는 리턴값 등을 받아서 만약 오케이가 아니라면 메일이 보내지지 않도록 한다던가 해야할듯 하다.
+
+## 미들웨어
+
+웹 개발에서 일반적으로 미들웨어라 함은 라우트 핸들러가 클라이언트의 요청을 처리하기 전에 수행되는 컴포넌트다.  
+미들웨어를 활용하면 다음과 같은 작업들을 수행할 수 있다.
+
+1. 쿠키 파싱: 쿠키를 파싱하여 사용하기 쉬운 데이터 구조로 변경
+2. 세션 관리: 세션 쿠키를 찾고, 세션의 상태를 조회해 세션 정보를 추가
+3. 인증/인가: 사용자가 서비스에 접근 가능한 권한이 있는지 확인(Nest는 이 때 가드를 이용하도록 권장)
+4. 본문 파싱: 데이터를 유형에 따라 읽고 해석한 다음 매개변수에 넣는 작업
+
+두가지 방법으로 넣을 수 있다.
+
+```ts
+@Injectable()
+export class LoggerMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction) {
+    console.log('Request...');
+    next();
+  }
+}
+```
+
+위와 같이 클래스 형태로 만들어서 모듈에 적용시키는 방법은 아래와 같다.
+
+```ts
+@Module({
+  ...
+})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): any {
+    consumer.apply(LoggerMiddleware).forRoutes('/users');
+  }
+}
+```
+
+위처럼 NestModule을 상속받은 후 configure를 설정해주면 된다.
+
+함수로 만들었다면 전역으로 적용시킬 수 있다.
+
+```ts
+export function logger3(req: Request, res: Response, next: NextFunction) {
+  console.log('Request3...');
+  next();
+}
+```
+
+위와 같이 함수는 bootstrap 함수에 use를 사용해주면 된다.
+
+```ts
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+    }),
+  );
+  app.use(logger3);
+  await app.listen(3000);
+}
+```
