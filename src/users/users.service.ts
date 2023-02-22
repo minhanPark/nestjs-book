@@ -37,6 +37,7 @@ export class UsersService {
   async verifyEmail(signupVerifyToken: string): Promise<string> {
     // 1. DB에서 signupVerifyToken으로 회원가입 처리 중인 유저가 있는 지 조회하고 없다면 에러처리
     // 2. 바로 로그인 상태가 되도록 JWT를 발급
+    // const user = await this.user
     throw new Error('Method not impletement');
   }
 
