@@ -1,30 +1,74 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { EmailService } from 'src/email/email.service';
 import * as uuid from 'uuid';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
+import { UserEntity } from './user.entity';
 
 @Injectable()
 export class UsersService {
-  constructor(private emailService: EmailService) {}
+  constructor(
+    private emailService: EmailService,
+    @InjectRepository(UserEntity)
+    private usersRepository: Repository<UserEntity>,
+    private dataSource: DataSource,
+  ) {}
   async createUser(name: string, email: string, password: string) {
-    await this.checkUserExists(email);
-
+    const userExist = await this.checkUserExists(email);
+    if (userExist) {
+      throw new UnprocessableEntityException(
+        '해당 이메일로는 가입할 수 없습니다.',
+      );
+    }
     const signupVerifyToken = uuid.v1();
 
-    await this.saveUser(name, email, password, signupVerifyToken);
-    await this.sendMemberJoinEmail(email, signupVerifyToken);
+    const result = await this.saveUser(
+      name,
+      email,
+      password,
+      signupVerifyToken,
+    );
+    if (result) {
+      await this.sendMemberJoinEmail(email, signupVerifyToken);
+    }
   }
 
-  private checkUserExists(email: string) {
-    return false;
+  private async checkUserExists(email: string): Promise<boolean> {
+    const user = await this.usersRepository.findOne({ where: { email } });
+    return user !== null;
   }
 
-  private saveUser(
+  private async saveUser(
     name: string,
     email: string,
     password: string,
     signupVerifyToken: string,
   ) {
-    return;
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    let isSuccess = false;
+    try {
+      const user = new UserEntity();
+      user.name = name;
+      user.email = email;
+      user.password = password;
+      user.signupVerifyToken = signupVerifyToken;
+      await queryRunner.manager.save(user);
+      isSuccess = true;
+      // throw new InternalServerErrorException();
+    } catch (e) {
+      await queryRunner.rollbackTransaction();
+      isSuccess = false;
+    } finally {
+      await queryRunner.release();
+      return isSuccess;
+    }
   }
 
   private async sendMemberJoinEmail(email: string, signupVerifyToken: string) {
