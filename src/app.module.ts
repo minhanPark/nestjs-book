@@ -6,12 +6,13 @@ import { validationSchema } from './config/validationSchema';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Logger2Middleware, LoggerMiddleware } from './logger.middleware';
 import { AuthModule } from './auth/auth.module';
+import authConfig from './config/authConfig';
 @Module({
   imports: [
     UsersModule,
     ConfigModule.forRoot({
       envFilePath: [`${__dirname}/config/env/.env.${process.env.NODE_ENV}`],
-      load: [emailConfig],
+      load: [emailConfig, authConfig],
       isGlobal: true,
       validationSchema,
     }),
@@ -33,8 +34,4 @@ import { AuthModule } from './auth/auth.module';
   controllers: [],
   providers: [],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): any {
-    consumer.apply(LoggerMiddleware, Logger2Middleware).forRoutes('/users');
-  }
-}
+export class AppModule {}
