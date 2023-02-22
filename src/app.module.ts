@@ -5,6 +5,7 @@ import emailConfig from './config/emailConfig';
 import { validationSchema } from './config/validationSchema';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Logger2Middleware, LoggerMiddleware } from './logger.middleware';
+import { AuthModule } from './auth/auth.module';
 @Module({
   imports: [
     UsersModule,
@@ -27,6 +28,7 @@ import { Logger2Middleware, LoggerMiddleware } from './logger.middleware';
       // migrations: [__dirname + '/**/migrations/*.js'],
       // migrationsTableName: 'migrations',
     }),
+    AuthModule,
   ],
   controllers: [],
   providers: [],
